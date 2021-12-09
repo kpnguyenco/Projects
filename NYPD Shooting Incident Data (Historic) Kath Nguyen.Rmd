@@ -1,0 +1,236 @@
+---
+title: "NYPD Shooting Incident Data (Historic)"
+author: "Kath Nguyen"
+date: "12/5/2021"
+output:
+  html_document: default
+  pdf_document: default
+---
+
+```{r, setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Project Step 1: Start an Rmd Document
+---
+For this portion of the project, the first step was to ensure that the `tidyverse` package would be accessible to run the codes necessary to analyze this data using the `library()` function. From there, the data set, "NYPD Shooting Incident Data (Historic)", was imported using the url (<https://data.cityofnewyork.us/api/views/833y-fsy8/rows.csv?accessType=DOWNLOAD>). The url was then assigned the variable "NYPD_data_url" to simplify the csv file to tibble conversion.
+
+```{r, import, echo= TRUE}
+#Import NYPD Shooting Incident Data (Historic) URL
+
+library(tidyverse)
+library(lubridate)
+NYPD_data_url <- "https://data.cityofnewyork.us/api/views/833y-fsy8/rows.csv?accessType=DOWNLOAD"
+
+```
+
+Thereafter, the **NYPD_data_url** variable was placed into a `read_csv()` function to properly convert the data csv file into a tibble.
+```{r, import_convert, echo = TRUE}
+#Import NYPD Shooting Incident Data (Historic) as csv
+#Read as tibble
+NYPD_data <- read_csv(NYPD_data_url)
+NYPD_data
+
+```
+
+This data set lists all shooting incident that occurred in New York City from last year dating back to 2006. Furthermore, the data set provides numeric and non-numeric data for each variable related to the shooting incidents.
+Thus far in this data set, there should be the following variables/factors:
+
+* INCIDENT KEY
+* OCCUR_DATE 
+* OCCUR_TIME 
+* BORO   
+* PRECINCT 
+* JURISDICTION_CODE
+* LOCATION_DESC
+* STATISTICAL_MURDER_FLAG
+* PERP_AGE_GROUP 
+* PERP_SEX 
+* PERP_RACE
+* VIC_AGE_GROUP 
+* VIC_SEX 
+* VIC_RACE
+* X_COORD_CD 
+* Y_COORD_CD 
+* Latitude 
+* Longitude 
+* Lon_Lat
+
+Given this data, it will be used to investigate whether race, sex, and borough location are factors that may have led to these shooting incidents over the years.
+
+## Project Step 2: Tidy and Transform Data
+---
+For this second portion, data needs to be wrangled in a way that is cleaner and more concise. Before doing so, a preview of the data is necessary to check if there is missing data. 
+```{r, tidy_NYPD_Data_check, echo = TRUE}
+View(NYPD_data) #preview whole data 
+summary(NYPD_data)
+```
+Based on the data/summary and the purpose of this investigation, evidently coordinates, latitude/longitude, time, age, locations, codes, and incident key information will not be needed; therefore they will be removed. Furthermore, considering that majority of the data listed for perpetrators are N/A, it will not be used for analysis and will be removed as well. This first code helps tidy up all the excess data using the functions in the `tidyverse` library.
+
+```{r, tidy_NYPD_Data, echo = TRUE}
+#Remove: INCIDENT_KEY, OCCUR_TIME, BORO, PRECINCT, JURISDICTION_CODE, LOCATION_DESC, STATISTICAL_MURDER_FLAG, PERP_AGE_GROUP,PERP_SEX,PERP_RACE, VIC_AGE_GROUP, X_COORD_CD, Y_COORD_CD, Latitude, Longitude, Lon_Lat
+
+tidy_NYPD_data <- NYPD_data %>%
+  select(-c(INCIDENT_KEY, 
+            OCCUR_TIME, 
+            PRECINCT, 
+            JURISDICTION_CODE, 
+            LOCATION_DESC, 
+            STATISTICAL_MURDER_FLAG,
+            PERP_AGE_GROUP,
+            PERP_SEX,
+            PERP_RACE,
+            VIC_AGE_GROUP,
+            X_COORD_CD, 
+            Y_COORD_CD, 
+            Latitude, 
+            Longitude, 
+            Lon_Lat))
+
+tidy_NYPD_data
+summary(tidy_NYPD_data) #summarize the data
+```
+
+After condensing as much as possible in the previous code, it was necessary to find summarize the data, using the `summary()` function, to ensure all the data is correct. Unfortunately, since the **OCCUR_DATE** column was not classified as a *date* but as a *character*, this column needed to be manipulated into a *date* classified column. This process can be seen in the following code chunk. 
+
+```{r, tidy_NYPD_Data_date, echo = TRUE}
+#convert the OCCUR_DATE column from character to date class 
+tidy_NYPD_data_date <- tidy_NYPD_data %>%
+  rename(Borough = BORO,
+         Victim_Sex = VIC_SEX,
+         Victim_Race = VIC_RACE) %>%
+  mutate(Date = as.Date(OCCUR_DATE, "%m/%d/%Y")) %>%
+  select(-c(OCCUR_DATE))
+tidy_NYPD_data_date
+```
+As shown above, column **Date** was created in place of **OCCUR_DATE**.
+
+For the next portion, to simplify the data for analysis, rather than using the actual dates in the the **Date** column, it was simpler to utilize only the years. So the **Date** column needed to be simplified into a **Year** column. 
+```{r, tidy_NYPD_Date_Final, echo=TRUE, message=FALSE}
+tidy_NYPD_data_final <- tidy_NYPD_data_date%>%
+  mutate(Year = format(Date, "%Y")) %>%
+  group_by(Borough, Victim_Sex, Victim_Race, Year) %>%
+  summarise(name_count = n())%>%
+  select(Borough,
+         Victim_Sex, 
+         Victim_Race,
+         Year)%>%
+  ungroup()
+tidy_NYPD_data_final
+```
+Alas, the data was finally being tidy and ready for analysis, which leads to the next part of the data science process: visualize and model the data.
+
+## Project Step 3: Add Visualizations and Analysis
+---
+For this portion of the project, visualizations in relation to the investigation are necessary for understanding what the data representing, as well as potentially acknowledging potential external factors. To investigate whether race, sex, and borough location are contributing factors of shooting incidents, histograms were made for each variable, in respect to **Year**. 
+
+### Visualization 1: Borough Location of Shooting Victims Histogram
+**_Histograms_**
+```{r, gghist_Borough_facet, echo=TRUE, message=FALSE}
+ggplot(tidy_NYPD_data_final,aes(x=Year, group=Borough, fill=factor(Borough)))+
+   geom_histogram(stat = "count",
+   position="dodge", bins = 10)+ 
+   theme_bw()+
+   facet_wrap(Borough~.) +
+   theme(legend.position = "bottom",
+        axis.text.x = element_text (angle = 90)) + 
+   labs(title = str_c("Borough Location of Shooting Victims Facet Histogram"),
+       y = NULL)
+   
+```
+**Analysis 1: Borough Location of Shooting Victims Histogram**
+Using the given histogram visualization above, it is evident by the heights of these bars and high count overall that Bronx and Brooklyn are hotspots for shooting incidents throughout the last 15 years. This could indicate that location can determine higher risk for shooting incidents. However, given that the consistent and uniform shape of the bars over time, it indicates that the amount of shootings for Brooklyn and Bronx are on average about the same. This trend is also seen in the histograms for Manhattan, Queens, and Staten Island. In result, this also means that if there are increased or decreased amounts of crimes in NYC, evidently location does not strongly impact the causes of shooting incidents; however, location does play a role in increased risk.  
+
+### Visualization 2: Sex of Shooting Victims Histogram
+```{r, gghist_Vic_Sex_facet, echo=TRUE, message=FALSE}
+ggplot(tidy_NYPD_data_final,aes(x=Year,group=Victim_Sex, fill=factor(Victim_Sex)))+
+   geom_histogram(stat = "count",
+   position="dodge", bins = 10)+ 
+   theme_bw()+
+   facet_wrap(Victim_Sex~.) +
+   theme(legend.position = "bottom",
+        axis.text.x = element_text (angle = 90)) + 
+   labs(title = str_c("Sex of Shooting Victims Facet Histogram"),
+       y = NULL)
+```
+**Analysis 2: Sex of Shooting Victims Histogram**
+For this graph, the male histogram of NYC shootings are clearly higher than females, no matter what year it was for the past 15 years. Since all the male histogram bars in each year are taller than female, it is evident that between the two sexes, male have a higher chance of encountering a shooting incident compared to a women. In result, sex is likely a factor that plays into how likely one is going to become a victim in shootings. 
+
+### Visualization 3: Race of Shooting Victims Facet Histogram
+```{r, gghist_Vic_Race_facet, echo=TRUE, message=FALSE}
+ggplot(tidy_NYPD_data_final,aes(x=Year,group=Victim_Race, fill=factor(Victim_Race)))+
+   geom_histogram(stat = "count",
+   position="dodge", bins = 10)+ 
+   theme_bw()+
+   facet_wrap(Victim_Race~., nrow=2) +
+   theme(legend.position = "bottom",
+        axis.text.x = element_text (angle = 90)) + 
+   labs(title = str_c("Race of Shooting Victims Facet Histogram"),
+       y = NULL)
+```
+**Analysis 3: Race of Shooting Victims Facet Histogram**
+Similarly to the histograms for Borough Locations, the average count for each respective racial group is about the same, meaning all the racial groups have some sort of uniformity when it comes to representation in NYC. Based on solely this information, this shows consistency throughout the years of racial groups involved in shooting incidents, which could mean that racism does not necessarily play a role in shooting incidents because the proportion of those victims remain the same over the years. However, on the contrary, considering that Blacks, White Hispanics, and Black Hispanics are the ones with the highest count shooting victims, it could indicate racism plays a role in these incidents because they have the highest counts consistently. Without any knowledge of how prominent these races are relative to their population, it could easily be misunderstood. Therefore, based on this, race can play a role towards who the victims are in these shooting accidents; however, there is not enough evidence in this data set to prove this as a strong factor. In result, this variable is likely a potential factor but not a definite factor for instigating these shooting incidents. Therefore, among these three histograms, it is likely there are other potential factors that contribute to the shooting incidents overall.
+
+**_Plot Comparisons_** 
+### Visualization 4: Borough Location and Sex of Shooting Victims
+In this data, the Borough locations were graphed by year relative to sex.
+```{r, ggplot_Borough_Sex, echo=TRUE, message=FALSE}
+ggplot(tidy_NYPD_data_final,aes(x=Year, 
+                                group=Borough, 
+                                colour = Borough))+
+   geom_freqpoly(stat = "count",
+   position="dodge", bins = 10)+
+  facet_wrap(Victim_Sex~.)+
+  theme(legend.position = "bottom",
+        axis.text.x = element_text (angle = 90)) + 
+  labs(title = str_c("Borough Location and Sex of Shooting Victims"),
+       y = NULL)
+   
+```
+**Analysis 4: Borough Location and Sex of Shooting Victims**
+With two variables displayed in this plot, it is evident that the count of victims based on borough location is about the same hierarchy as the one demonstrated in visualization 1. However, despite some differences in plot for each location, the overall count of male victims stays true across all places. This means that regardless of where the shooting happens, males are at high risk of becoming victims to them, which also matches the analysis of those factors individually on the histogram. Therefore, sex can determine the chances of a person becoming a victim to shooting, regardless of that individuals where the crime may take place.
+
+### Visualization 5: Race and Borough Location of Shooting Victims
+In this data, each race was graphed by year, relative to Borough Location..
+```{r, ggplot_Vic_Race_Borough, echo=TRUE, message=FALSE}
+ggplot(tidy_NYPD_data_final,aes(x=Year, 
+                                group=Victim_Race, 
+                                colour = Victim_Race))+
+   geom_freqpoly(stat = "count",
+   position="dodge", bins = 10)+
+  facet_grid(Borough~.)+
+  theme(legend.position = "bottom",
+        axis.text.x = element_text (angle = 90)) + 
+  labs(title = str_c("Race and Borough Location of Shooting Victims"),
+       y = NULL)
+```  
+**Analysis 5: Race and Borough Location of Shooting Victims**
+The outcome of this graph does not indicate any sort of difference between victims of differing races in regards to the differences in location. This indicates that both Borough location and race demonstrate little to no effect on whether a person becomes a victim to shooting because there is not significant difference for either data sets. This also indicates there are likely other factors that likely appeal to how these shooting incidents happen.
+
+### Visualization 6: Race and Sex of Shooting Victims
+In this data, each race was graphed by year, relative to Borough Location..
+```{r, ggplot_Vic_Race_Sex, echo=TRUE, message=FALSE}
+ggplot(tidy_NYPD_data_final,aes(x=Year, 
+                                group=Victim_Race, 
+                                colour = Victim_Race))+
+   geom_freqpoly(stat = "count",
+   position="dodge", bins = 10)+
+  facet_wrap(Borough~.)+
+  theme(legend.position = "bottom",
+        axis.text.x = element_text (angle = 90)) + 
+  labs(title = str_c("Race and Sex of Shooting Victims"),
+       y = NULL)
+```
+**Analysis 6: Race and Sex of Shooting Victims**
+Similarly to the histograms for Borough Locations, the hierarchy of race is somewhat the same as as visualization 1 for both males and females. Based on this information, the relative amount of people by race that become victims are about the same between both sexes. However, as previous data has shown, males are at higher risk than females to be in the range of fire, so based on that, it is clear that despite the difference in count for both sexes, the racial proportions that fall victim are approximately the same between both genders. This highly indicates that race does not help contribute to the causes of the these shooting incidents when sex is already a factor. 
+
+**Reflection**
+Based on the analysis conducted on this trial, it is clear that sex is predominantly on of the factors that potentially lead to these shooting incidents. However, the relationship between both borough locations and race to shooting incidents overall were not as impactful as sex was. In result, it led to many questions, such as whether differences between racial groups were just relative to the proportion of the whole population in New York; whether the Borough location size contributed towards slight differences in count; and whether there are other factors like: criminal records, living situation, and the perpetrator that makes a huge difference for how shooting incidents occur.
+
+**Conclusion**
+Overall, to answer investigation question for thsi project, evidently only sex prove to be a factor that largely contributed to some of these shooting incidents, while borough location and race did not highly contribute. However, due to some of the data, there is a chance they both serve as a minor factor towards these incidents instead. Throughout this research, there were some issues with bias, considering race is one of the larger topics in the social world today. However, unlike the common knowledge or racism and prejudice towards those of minority communities, especially Hispanic and Black communities, this data did not represent that outlook, which actually made analyzing this project a little harder. Other sources of bias lie in the data itself, for it only represents the victims and not the prepertrators, so it could have lead to biases supporting th vitims protrayal of the shooting incidents over those who were deemed the prepratrator. Lastly, there is bias towards identifying minority groups without acknowledging the relative proportion of minorities within a population. Without this acknowledgement, it essentially favours the minority group by name rather than the data, which was a mistake almost made during this project. However, with thorough re-evaluation and reflection, all these biases were acknowledged and emphasized by means of writing the analysis and reflection.
+
+**Session Info**
+```{r, echo=TRUE}
+sessionInfo()
+```
