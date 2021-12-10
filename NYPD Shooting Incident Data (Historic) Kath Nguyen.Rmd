@@ -222,7 +222,316 @@ ggplot(tidy_NYPD_data_final,aes(x=Year,
        y = NULL)
 ```
 **Analysis 6: Race and Sex of Shooting Victims**
-Similarly to the histograms for Borough Locations, the hierarchy of race is somewhat the same as as visualization 1 for both males and females. Based on this information, the relative amount of people by race that become victims are about the same between both sexes. However, as previous data has shown, males are at higher risk than females to be in the range of fire, so based on that, it is clear that despite the difference in count for both sexes, the racial proportions that fall victim are approximately the same between both genders. This highly indicates that race does not help contribute to the causes of the these shooting incidents when sex is already a factor. 
+Similarly to the histograms for Borough Locations, the hierarchy of race is somewhat the same as as visualization 1 for both males and females. Based on this information, the relative amount of people by race that become victims are about the same between both sexes. However, as previous data has shown, males are at higher risk than females to be in the range of fire, so based on that, it is clear that despite the difference in count for both sexes, the racial proportions that fall victim are approximately the same between both genders. This highly indicates that race does not help contribute to the causes of the these shooting incidents when sex is already a factor.
+
+To simplify the analyzing and modeling aspect of all three of these variables, cumulative total shootings were used in place of count and graphed and are demonstrated as followed. In this case, the dominating characteristic of each varible be seen.
+```{r, modelsetup, echo=TRUE, message=FALSE}
+NYPD_data <-NYPD_data %>%
+  mutate(OCCUR_DATE = mdy(OCCUR_DATE),  # convert OCCUR_DATE to date
+         BORO = factor(BORO),
+         VIC_SEX = factor(VIC_SEX),
+         VIC_RACE = factor(VIC_RACE)) %>%
+  # remove unneeded columns
+  select(-c(INCIDENT_KEY, 
+            PRECINCT, 
+            JURISDICTION_CODE,
+            LOCATION_DESC,
+            STATISTICAL_MURDER_FLAG,
+            PERP_AGE_GROUP,
+            PERP_SEX,
+            PERP_RACE,
+            VIC_AGE_GROUP,
+            X_COORD_CD, 
+            Y_COORD_CD, 
+            Latitude, 
+            Longitude, 
+            Lon_Lat))
+```
+
+```{r, modelingconversions, echo=TRUE, message=FALSE}
+# sort by date
+NYPD_data <- NYPD_data %>%
+  arrange(OCCUR_DATE)
+
+# convert to year again
+NYPD_data <- NYPD_data %>%
+  mutate(Year = floor_date(OCCUR_DATE, "year"))
+NYPD_data$rec <- 1
+
+# cuml. shootings by borough
+cuml_cases_b <- NYPD_data %>%
+  group_by(BORO) %>%
+  mutate(Cumulative_Shootings = cumsum(rec)) %>%
+  select(-rec) %>%
+  ungroup()
+
+# cuml. shootings per year
+cuml_cases_by <- cuml_cases_b %>%
+  group_by(Year, BORO) %>%
+  top_n(1, Cumulative_Shootings) %>%
+  select(c(Year, BORO, Cumulative_Shootings)) %>%
+  ungroup()
+
+# cuml. shootings by sex
+cuml_cases_s <- NYPD_data %>%
+  group_by(VIC_SEX) %>%
+  mutate(Cumulative_Shootings = cumsum(rec)) %>%
+  select(-rec) %>%
+  ungroup()
+
+# cuml. shootings per year
+cuml_cases_sy <- cuml_cases_s %>%
+  group_by(Year, VIC_SEX) %>%
+  top_n(1, Cumulative_Shootings) %>%
+  select(c(Year, VIC_SEX, Cumulative_Shootings)) %>%
+  ungroup()
+
+# cuml. shootings by borough
+cuml_cases_r <- NYPD_data %>%
+  group_by(VIC_RACE) %>%
+  mutate(Cumulative_Shootings = cumsum(rec)) %>%
+  select(-rec) %>%
+  ungroup()
+
+# cuml. shootings per year
+cuml_cases_ry <- cuml_cases_r %>%
+  group_by(Year, VIC_RACE) %>%
+  top_n(1, Cumulative_Shootings) %>%
+  select(c(Year, VIC_RACE, Cumulative_Shootings)) %>%
+  ungroup()
+```
+
+```{r, modelingboroughdata, echo=TRUE, message=FALSE}
+# separate data to individual boroughs for model
+brooklyn <- cuml_cases_by %>%
+  filter(BORO == "BROOKLYN")
+bronx <- cuml_cases_by %>%
+  filter(BORO == "BRONX")
+manhattan <- cuml_cases_by %>%
+  filter(BORO == "MANHATTAN")
+queens <- cuml_cases_by %>%
+  filter(BORO == "QUEENS")
+staten_island <- cuml_cases_by %>%
+  filter(BORO == "STATEN ISLAND")
+```
+
+### Visualization 7: Cumulative Shootings by Borough (2006-2020)
+```{r, modelingborough, echo=TRUE, message=FALSE}
+brooklyn %>%
+  ggplot(aes(x = Year, y = Cumulative_Shootings)) +
+  geom_line(aes(color="Brooklyn")) +
+  geom_point(aes(color="Brooklyn")) +
+  geom_line(data=queens, aes(color="Queens")) +
+  geom_point(data=queens, aes(color="Queens")) +
+  geom_line(data=manhattan, aes(color="Manhattan")) +
+  geom_point(data=manhattan, aes(color="Manhattan")) +
+  geom_line(data=bronx, aes(color="Bronx")) +
+  geom_point(data=bronx, aes(color="Bronx")) +
+  geom_line(data=staten_island, aes(color="Staten Island")) +
+  geom_point(data=staten_island, aes(color="Staten Island")) +
+  scale_y_log10() +
+  theme(legend.position="bottom",
+        axis.text.x = element_text(angle=90)) +
+  labs(title="Cumulative Shootings by Borough (2006-2020)",
+       y="Total shootings",
+       x="Year")
+```
+**Analysis 7: Cumulative Shootings by Borough (2006-2020)**
+As demonstrated in the graph above, Brooklyn is clearly the borough with the most shooting incidents. This graph also indicates over time that the amount of shootings have decreased, for the curves are all flattening for each borough.
+
+```{r, modelingsexdata, echo=TRUE, message=FALSE}
+# separate data to individual boroughs for model
+female <- cuml_cases_sy %>%
+  filter(VIC_SEX == "F")
+male <- cuml_cases_sy %>%
+  filter(VIC_SEX == "M")
+```
+
+### Visualization 8: Cumulative Shootings by Sex (2006-2020)
+```{r, modelingsex, echo=TRUE, message=FALSE}
+female %>%
+  ggplot(aes(x = Year, y = Cumulative_Shootings)) +
+  geom_line(aes(color="Female")) +
+  geom_point(aes(color="Female")) +
+  geom_line(data=male, aes(color="Male")) +
+  geom_point(data=male, aes(color="Male")) +
+  scale_y_log10() +
+  theme(legend.position="bottom",
+        axis.text.x = element_text(angle=90)) +
+  labs(title="Cumulative Shootings by Sex (2006-2020)",
+       y="Total shootings",
+       x="Year")
+```
+**Analysis 8: Cumulative Shootings by Sex (2006-2020)**
+Similar to the histogram, males are the ones most likely to be victims of shooting incidents. As demonstrated in the graph like the previous, despite the prominence of this trait, the number of shootings are dying down overtime.
+
+```{r, modelingracedata, echo=TRUE, message=FALSE}
+# separate data to individual boroughs for model
+ai_an <- cuml_cases_ry %>%
+  filter(VIC_RACE == "AMERICAN INDIAN/ALASKAN NATIVE")
+asian_pi <- cuml_cases_ry %>%
+  filter(VIC_RACE == "ASIAN / PACIFIC ISLANDER")
+black <- cuml_cases_ry %>%
+  filter(VIC_RACE == "BLACK")
+black_hisp <- cuml_cases_ry %>%
+  filter(VIC_RACE == "BLACK HISPANIC")
+white <- cuml_cases_ry %>%
+  filter(VIC_RACE == "WHITE")
+white_hisp <- cuml_cases_ry %>%
+  filter(VIC_RACE == "WHITE HISPANIC")
+```
+
+### Visualization 9: Cumulative Shootings by Race (2006-2020)
+```{r, modelingrace, echo=TRUE, message=FALSE}
+ai_an %>%
+  ggplot(aes(x = Year, y = Cumulative_Shootings)) +
+  geom_line(aes(color="American Indian/Alaskan Native")) +
+  geom_point(aes(color="American Indian/Alaskan Native")) +
+  geom_line(data=asian_pi, aes(color="Asian/Pacific Islander")) +
+  geom_point(data=asian_pi, aes(color="Asian/Pacific Islander")) +
+  geom_line(data=black, aes(color="Black")) +
+  geom_point(data=black, aes(color="Black")) +
+  geom_line(data=black_hisp, aes(color="Black Hispanic")) +
+  geom_point(data=black_hisp, aes(color="Black Hispanic")) +
+  geom_line(data=white, aes(color="White")) +
+  geom_point(data=white, aes(color="White")) +
+  geom_line(data=white_hisp, aes(color="White Hispanic")) +
+  geom_point(data=white_hisp, aes(color="White Hispanic")) +
+  scale_y_log10() +
+  theme(legend.position="bottom",
+        axis.text.x = element_text(angle=90)) +
+  labs(title="Cumulative Shootings by Race (2006-2020)",
+       y="Total shootings",
+       x="Year")
+```
+**Analysis 9: Cumulative Shootings by Sex (2006-2020)**
+Clearly in this case, the number of shootings are smoothing out, but Blacks are the ones with the most shooting incidents, like the histograms indicated.
+
+```{r, modelingbrooklynpred, echo=TRUE, message=FALSE}
+brooklyn <- brooklyn %>%
+  group_by(Year, BORO) %>%
+  top_n(1, Cumulative_Shootings) %>%
+  select(c(Year, BORO, Cumulative_Shootings)) %>%
+  ungroup()
+
+brooklyn <- brooklyn %>%
+  mutate(Cumulative_Shootings_BY = Cumulative_Shootings)
+
+brooklyn <- brooklyn %>%
+  mutate(New_Shootings_BY = Cumulative_Shootings_BY - lag(Cumulative_Shootings_BY))
+brooklyn$New_Shootings_BY <- ifelse(is.na(brooklyn$New_Shootings_BY), 
+                                                 brooklyn$Cumulative_Shootings_BY,
+                                                 brooklyn$New_Shootings_BY)
+```
+## Modeling
+---
+For this portion, modeling was done to compare actual values to predictive values of new shooting cases over time; however due to having many variables, only the most prominent trait of each variable was seleted for modeling, which were: Brooklyn for borough location, Male for sex, and Black for race.
+### Modeling 1: Brooklyn New Shooting Reports by Year Model Comparison
+```{r, modelingbrooklynpredmodel, echo=TRUE, message=FALSE}
+mod_brooklyn <- lm(New_Shootings_BY ~ Year, data=brooklyn)
+summary(mod_brooklyn)
+
+brooklyn_pred <- brooklyn %>% 
+  mutate(pred = predict(mod_brooklyn))
+
+brooklyn_pred %>% 
+  ggplot() +
+  geom_point(aes(x = Year, 
+                 y = New_Shootings_BY), 
+             color = "purple") + 
+  geom_point(aes(x = Year, y = pred), 
+             color = "pink") + 
+  theme(legend.position="bottom",
+       axis.text.x = element_text(angle=90)) +
+  labs(title="Brooklyn New Shooting Reports by Year Model Comparison",
+       y="New Yearly Shootings",
+       x="Year")
+```
+**Analysis 10: Brooklyn New Shooting Reports by Year Model Comparison**
+In this graph, evidently there is a steep negative slope, indicating the total number of cases are likely to decrease based on the actual and predicted data, regardless if it is in Brooklyn or not.
+```{r, modelingmalepred, echo=TRUE, message=FALSE}
+
+male <- male %>%
+  group_by(Year, VIC_SEX) %>%
+  top_n(1, Cumulative_Shootings) %>%
+  select(c(Year, VIC_SEX, Cumulative_Shootings)) %>%
+  ungroup()
+
+male <- male %>%
+  mutate(Cumulative_Shootings_BY = Cumulative_Shootings)
+
+male <- male %>%
+  mutate(New_Shootings_BY = Cumulative_Shootings_BY - lag(Cumulative_Shootings_BY))
+male$New_Shootings_BY <- ifelse(is.na(male$New_Shootings_BY), 
+                                                 male$Cumulative_Shootings_BY,
+                                                 male$New_Shootings_BY)
+```
+
+### Modeling 11: Male New Shooting Reports by Year Model Comparison
+```{r, modelingmalepredmodel, echo=TRUE, message=FALSE}
+mod_male <- lm(New_Shootings_BY ~ Year, data=male)
+summary(mod_male)
+
+male_pred <- male %>% 
+  mutate(pred = predict(mod_male))
+
+male_pred %>% 
+  ggplot() +
+  geom_point(aes(x = Year, 
+                 y = New_Shootings_BY), 
+             color = "blue") + 
+  geom_point(aes(x = Year, y = pred), 
+             color = "red") + 
+  theme(legend.position="bottom",
+       axis.text.x = element_text(angle=90)) +
+  labs(title="Male New Shooting Reports by Year Model Comparison",
+       y="New Yearly Shootings",
+       x="Year")
+```
+**Analysis 11: Male New Shooting Reports by Year Model Comparison**
+In this graph, evidently there is also a steep negative slope, indicating the total number of cases are likely to decrease based on the actual and predicted data, regardless if the victim at risk is male. This is vital becasue it somewhat debunks the analysis given previously stating that sex is one of the features that may instigate shooting incidents.
+
+```{r, modelingblackpred, echo=TRUE, message=FALSE}
+
+black <- black %>%
+  group_by(Year, VIC_RACE) %>%
+  top_n(1, Cumulative_Shootings) %>%
+  select(c(Year, VIC_RACE, Cumulative_Shootings)) %>%
+  ungroup()
+
+black <- black %>%
+  mutate(Cumulative_Shootings_BY = Cumulative_Shootings)
+
+black <- black %>%
+  mutate(New_Shootings_BY = Cumulative_Shootings_BY - lag(Cumulative_Shootings_BY))
+black$New_Shootings_BY <- ifelse(is.na(black$New_Shootings_BY), 
+                                                 black$Cumulative_Shootings_BY,
+                                                 black$New_Shootings_BY)
+```
+
+### Visualization 12: Black New Shooting Reports by Year Model Comparison
+```{r, modelingblackpredmodel, echo=TRUE, message=FALSE}
+mod_black <- lm(New_Shootings_BY ~ Year, data=black)
+summary(mod_black)
+
+black_pred <- black %>% 
+  mutate(pred = predict(mod_black))
+
+black_pred %>% 
+  ggplot() +
+  geom_point(aes(x = Year, 
+                 y = New_Shootings_BY), 
+             color = "green") + 
+  geom_point(aes(x = Year, y = pred), 
+             color = "orange") + 
+  theme(legend.position="bottom",
+       axis.text.x = element_text(angle=90)) +
+  labs(title="Black New Shooting Reports by Year Model Comparison",
+       y="New Yearly Shootings",
+       x="Year")
+```
+**Analysis 9: Brooklyn New Shooting Reports by Year Model Comparison**
+In this graph, evidently there is a steep negative slope, indicating the total number of cases are likely to decrease based on the actual and predicted data, regardless of race in this case.
 
 **Reflection**
 Based on the analysis conducted on this trial, it is clear that sex is predominantly on of the factors that potentially lead to these shooting incidents. However, the relationship between both borough locations and race to shooting incidents overall were not as impactful as sex was. In result, it led to many questions, such as whether differences between racial groups were just relative to the proportion of the whole population in New York; whether the Borough location size contributed towards slight differences in count; and whether there are other factors like: criminal records, living situation, and the perpetrator that makes a huge difference for how shooting incidents occur.
